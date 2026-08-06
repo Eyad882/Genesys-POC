@@ -55,9 +55,23 @@
     </div>
 
     <script>
-        const TargetWindow = window.top || window.parent || window;
-        const OriginalPeerConnection = TargetWindow.RTCPeerConnection;
         const uiDisplay = document.getElementById('metrics-display');
+        
+        // 1. Deep frame-crawling loop to bypass strict desktop wrapper isolation
+        let TargetWindow = window;
+        try {
+            if (window.top && window.top.RTCPeerConnection) {
+                TargetWindow = window.top;
+            } else if (window.parent && window.parent.RTCPeerConnection) {
+                TargetWindow = window.parent;
+            } else if (window.parent.parent && window.parent.parent.RTCPeerConnection) {
+                TargetWindow = window.parent.parent;
+            }
+        } catch (e) {
+            console.log("Cross-origin boundary encountered, applying local fallback fallback.");
+        }
+
+        const OriginalPeerConnection = TargetWindow.RTCPeerConnection || window.RTCPeerConnection;
 
         if (OriginalPeerConnection) {
             TargetWindow.RTCPeerConnection = function(config, constraints) {
@@ -65,6 +79,7 @@
                 console.log("👉 POC SUCCESS: Genesys WebRTC connection intercepted!");
                 uiDisplay.innerText = "Connection detected! Capturing stats...";
 
+                // 2. Scan metrics every 3 seconds while audio line is active
                 const statsInterval = setInterval(async () => {
                     if (pc.signalingState === "closed") {
                         console.log("🛑 Connection closed. Stopping tracker loop.");
@@ -82,6 +97,7 @@
                             roundTripTime_ms: "N/A"
                         };
 
+                        // 3. Extract targets from native Chromium WebRTC reporting maps
                         stats.forEach(report => {
                             if (report.type === "inbound-rtp" && report.kind === "audio") {
                                 if (report.jitter !== undefined) {
@@ -100,7 +116,7 @@
                         uiDisplay.innerText = displayString;
                         console.log("📊 [WebRTC POC DATA]:", displayString);
 
-                        // 📡 HERE IS THE NETWORK LINE DELIVERING DATA TO PORT 8888:
+                        // 4. Send directly to your local computer port 8888
                         fetch('http://127.0.0', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
@@ -115,6 +131,7 @@
                 return pc;
             };
             console.log("✅ Hook cleanly applied into Genesys application context.");
+            uiDisplay.innerText = "Hook successfully applied. Make a call to stream data...";
         } else {
             console.error("❌ Failed to bind to WebRTC framework wrapper.");
             uiDisplay.innerText = "Error: Could not locate desktop wrapper objects.";
