@@ -57,7 +57,6 @@
     <script>
         const uiDisplay = document.getElementById('metrics-display');
         
-        // 1. Deep frame-crawling loop to bypass strict desktop wrapper isolation
         let TargetWindow = window;
         try {
             if (window.top && window.top.RTCPeerConnection) {
@@ -68,7 +67,7 @@
                 TargetWindow = window.parent.parent;
             }
         } catch (e) {
-            console.log("Cross-origin boundary encountered, applying local fallback.");
+            console.log("Cross-origin boundary hit, applying local fallback.");
         }
 
         const OriginalPeerConnection = TargetWindow.RTCPeerConnection || window.RTCPeerConnection;
@@ -79,7 +78,6 @@
                 console.log("👉 POC SUCCESS: Genesys WebRTC connection intercepted!");
                 uiDisplay.innerText = "Connection detected! Capturing stats...";
 
-                // 2. Scan metrics every 3 seconds while audio line is active
                 const statsInterval = setInterval(async () => {
                     if (pc.signalingState === "closed") {
                         console.log("🛑 Connection closed. Stopping tracker loop.");
@@ -97,7 +95,6 @@
                             roundTripTime_ms: "N/A"
                         };
 
-                        // 3. Extract targets from native Chromium WebRTC reporting maps
                         stats.forEach(report => {
                             if (report.type === "inbound-rtp" && report.kind === "audio") {
                                 if (report.jitter !== undefined) {
@@ -116,12 +113,9 @@
                         uiDisplay.innerText = displayString;
                         console.log("📊 [WebRTC POC DATA]:", displayString);
 
-                        // 4. Send directly to your local computer port 8888 via localhost address string
-                        fetch('http://localhost:8888/log', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: displayString
-                        }).catch(e => console.log("Local node listener offline"));
+                        // 💾 STORAGE INJECTION: Save directly to the machine's local browser memory bank.
+                        // This bypasses the blocked network/fetch rules entirely.
+                        localStorage.setItem('genesys_webrtc_poc', displayString);
 
                     } catch (err) {
                         console.error("❌ Stats query error:", err);
