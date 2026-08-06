@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Metrics Monitor - POC</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            margin-bottom: 15px;
+            border-left: 5px solid #ff4f00; /* Genesys Orange color cue */
+        }
+        h3 { margin-top: 0; color: #222; }
+        .status-badge {
+            background-color: #2ecc71;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            display: inline-block;
+        }
+        #metrics-display {
+            background: #2d3748;
+            color: #a0aec0;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: Courier, monospace;
+            white-space: pre-wrap;
+            margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h3>WebRTC Tracker Module</h3>
+        <span class="status-badge">POC ACTIVE</span>
+        <p>This module is listening to the Genesys Desktop application wrapper. Real-time metrics will stream below during an active call.</p>
+    </div>
+
+    <div class="card">
+        <h3>Live Streaming Data</h3>
+        <p>Open your Desktop App Developer Console (Ctrl+Shift+I) to see the full raw network events.</p>
+        <div id="metrics-display">Waiting for an active WebRTC session to initialize...</div>
+    </div>
+
+    <script>
+        // 1. Break out of iframe to intercept parent application constructor
+        const TargetWindow = window.parent || window;
+        const OriginalPeerConnection = TargetWindow.RTCPeerConnection;
+        const uiDisplay = document.getElementById('metrics-display');
+
+        if (OriginalPeerConnection) {
+            TargetWindow.RTCPeerConnection = function(config, constraints) {
+                const pc = new OriginalPeerConnection(config, constraints);
+                console.log("👉 POC SUCCESS: Genesys WebRTC connection intercepted!");
+                uiDisplay.innerText = "Connection detected! Capturing stats...";
+
+                // 2. Poll metrics every 3 seconds while connection is open
+                const statsInterval = setInterval(async () => {
+                    if (pc.signalingState === "closed") {
+                        console.log("🛑 Connection closed. Stopping tracker loop.");
+                        uiDisplay.innerText = "Call ended. Waiting for next connection...";
+                        clearInterval(statsInterval);
+                        return;
+                    }
+
+                    try {
+                        const stats = await pc.getStats();
+                        let metricsPayload = {
+                            timestamp: new Date().toISOString(),
+                            jitter_ms: "N/A",
+                            packetsLost: "N/A",
+                            roundTripTime_ms: "N/A"
+                        };
+
+                        // 3. Scan the Chromium layout reports for audio and latency fields
+                        stats.forEach(report => {
+                            // Target inbound audio channel
+                            if (report.type === "inbound-rtp" && report.kind === "audio") {
+                                if (report.jitter !== undefined) {
+                                    metricsPayload.jitter_ms = (report.jitter * 1000).toFixed(2); // Convert to milliseconds
+                                }
+                                if (report.packetsLost !== undefined) {
+                                    metricsPayload.packetsLost = report.packetsLost;
+                                }
+                            }
+                            // Target network round trip times
+                            if (report.type === "candidate-pair" && report.currentRoundTripTime !== undefined) {
+                                metricsPayload.roundTripTime_ms = (report.currentRoundTripTime * 1000).toFixed(2);
+                            }
+                        });
+
+                        // 4. Update the screen display in your custom app tab
+                        const displayString = JSON.stringify(metricsPayload, null, 2);
+                        uiDisplay.innerText = displayString;
+                        console.log("📊 [WebRTC POC DATA]:", displayString);
+
+                    } catch (err) {
+                        console.error("❌ Stats query error:", err);
+                    }
+                }, 3000);
+
+                return pc;
+            };
+            console.log("✅ Hook cleanly applied into Genesys application context.");
+        } else {
+            console.error("❌ Failed to bind to WebRTC framework wrapper.");
+            uiDisplay.innerText = "Error: Could not locate desktop wrapper objects.";
+        }
+    </script>
+</body>
+</html>
