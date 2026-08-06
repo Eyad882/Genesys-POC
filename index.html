@@ -17,7 +17,7 @@
             border-radius: 8px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.05);
             margin-bottom: 15px;
-            border-left: 5px solid #ff4f00; /* Genesys Orange color cue */
+            border-left: 5px solid #ff4f00;
         }
         h3 { margin-top: 0; color: #222; }
         .status-badge {
@@ -55,8 +55,7 @@
     </div>
 
     <script>
-        // 1. Break out of iframe to intercept parent application constructor
-        const TargetWindow = window.parent || window;
+        const TargetWindow = window.top || window.parent || window;
         const OriginalPeerConnection = TargetWindow.RTCPeerConnection;
         const uiDisplay = document.getElementById('metrics-display');
 
@@ -66,7 +65,6 @@
                 console.log("👉 POC SUCCESS: Genesys WebRTC connection intercepted!");
                 uiDisplay.innerText = "Connection detected! Capturing stats...";
 
-                // 2. Poll metrics every 3 seconds while connection is open
                 const statsInterval = setInterval(async () => {
                     if (pc.signalingState === "closed") {
                         console.log("🛑 Connection closed. Stopping tracker loop.");
@@ -84,27 +82,30 @@
                             roundTripTime_ms: "N/A"
                         };
 
-                        // 3. Scan the Chromium layout reports for audio and latency fields
                         stats.forEach(report => {
-                            // Target inbound audio channel
                             if (report.type === "inbound-rtp" && report.kind === "audio") {
                                 if (report.jitter !== undefined) {
-                                    metricsPayload.jitter_ms = (report.jitter * 1000).toFixed(2); // Convert to milliseconds
+                                    metricsPayload.jitter_ms = (report.jitter * 1000).toFixed(2);
                                 }
                                 if (report.packetsLost !== undefined) {
                                     metricsPayload.packetsLost = report.packetsLost;
                                 }
                             }
-                            // Target network round trip times
                             if (report.type === "candidate-pair" && report.currentRoundTripTime !== undefined) {
                                 metricsPayload.roundTripTime_ms = (report.currentRoundTripTime * 1000).toFixed(2);
                             }
                         });
 
-                        // 4. Update the screen display in your custom app tab
                         const displayString = JSON.stringify(metricsPayload, null, 2);
                         uiDisplay.innerText = displayString;
                         console.log("📊 [WebRTC POC DATA]:", displayString);
+
+                        // 📡 HERE IS THE NETWORK LINE DELIVERING DATA TO PORT 8888:
+                        fetch('http://127.0.0', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: displayString
+                        }).catch(e => console.log("Local node listener offline"));
 
                     } catch (err) {
                         console.error("❌ Stats query error:", err);
